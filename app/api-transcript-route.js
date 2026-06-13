@@ -1,98 +1,81 @@
-// The "agent brain": sends the transcript to Claude and gets back
-// the best clippable moments with timestamps, hooks, captions, hashtags.
+// Fetches a YouTube transcript using Supadata (managed, stable on Vercel).
+// To use the free scraper instead, see the note at the bottom.
 
 export const runtime = "nodejs";
 
+function extractVideoId(input) {
+  // Accepts a full URL or a bare video ID
+  if (!input) return null;
+  const trimmed = input.trim();
+  // Already an 11-char ID
+  if (/^[A-Za-z0-9_-]{11}$/.test(trimmed)) return trimmed;
+  // Try to pull from common URL shapes
+  const patterns = [
+    /(?:youtube\.com\/watch\?v=)([A-Za-z0-9_-]{11})/,
+    /(?:youtu\.be\/)([A-Za-z0-9_-]{11})/,
+    /(?:youtube\.com\/shorts\/)([A-Za-z0-9_-]{11})/,
+    /(?:youtube\.com\/embed\/)([A-Za-z0-9_-]{11})/,
+  ];
+  for (const p of patterns) {
+    const m = trimmed.match(p);
+    if (m) return m[1];
+  }
+  return null;
+}
+
 export async function POST(request) {
   try {
-    const { segments, fullText } = await request.json();
+    const { url } = await request.json();
+    const videoId = extractVideoId(url);
 
-    if (!fullText || fullText.length < 50) {
+    if (!videoId) {
       return Response.json(
-        { error: "Transcript is too short to analyze." },
+        { error: "Couldn't find a valid YouTube video ID in that input." },
         { status: 400 }
       );
     }
 
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.SUPADATA_API_KEY;
     if (!apiKey) {
       return Response.json(
-        { error: "AI service isn't configured (missing ANTHROPIC_API_KEY)." },
+        { error: "Transcript service isn't configured (missing SUPADATA_API_KEY)." },
         { status: 500 }
       );
     }
 
-    // Build a timestamped transcript so Claude can cite real start times.
-    const timestamped = (segments || [])
-      .map((s) => `[${formatTime(s.start)}] ${s.text}`)
-      .join("\n");
-
-    const prompt = `You are a short-form video editor. Below is a timestamped YouTube transcript. Find the 4 most clippable moments — each one a self-contained, attention-grabbing segment 20-60 seconds long that would work as a vertical Short/Reel/TikTok.
-
-For each moment, return:
-- "start": the timestamp it begins (use the [MM:SS] from the transcript)
-- "title": a punchy video title (under 60 chars)
-- "hook": the first line of on-screen text that stops the scroll (under 80 chars)
-- "caption": a posting caption (1-2 sentences)
-- "hashtags": array of 4-6 relevant hashtags (no # symbol)
-- "why": one sentence on why this clips well
-
-Respond with ONLY a JSON array of 4 objects. No markdown, no preamble, no backticks.
-
-TRANSCRIPT:
-${timestamped}`;
-
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }],
-      }),
-    });
+    const res = await fetch(
+      `https://api.supadata.ai/v1/youtube/transcript?videoId=${videoId}`,
+      { headers: { "x-api-key": apiKey } }
+    );
 
     if (!res.ok) {
       return Response.json(
-        { error: `AI analysis failed (status ${res.status}).` },
+        { error: `Transcript fetch failed (status ${res.status}). The video may have no captions.` },
         { status: 502 }
       );
     }
 
     const data = await res.json();
-    const text = data.content
-      .filter((b) => b.type === "text")
-      .map((b) => b.text)
-      .join("")
-      .replace(/```json|```/g, "")
-      .trim();
+    // data.content is an array of { text, offset, duration } segments
+    const segments = (data.content || []).map((seg) => ({
+      text: seg.text,
+      // offset is ms in Supadata; convert to seconds for readability
+      start: Math.round((seg.offset ?? 0) / 1000),
+    }));
 
-    let moments;
-    try {
-      moments = JSON.parse(text);
-    } catch {
-      return Response.json(
-        { error: "AI returned an unexpected format. Try again." },
-        { status: 502 }
-      );
-    }
+    const fullText = segments.map((s) => s.text).join(" ");
 
-    return Response.json({ moments });
+    return Response.json({ videoId, segments, fullText });
   } catch (err) {
     return Response.json(
-      { error: "Something went wrong during analysis." },
+      { error: "Something went wrong fetching the transcript." },
       { status: 500 }
     );
   }
 }
 
-function formatTime(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
+// --- FREE ALTERNATIVE (no API key, but unstable on Vercel) ---
+// npm install youtube-transcript-plus
+// import { fetchTranscript } from "youtube-transcript-plus";
+// const raw = await fetchTranscript(videoId);
+// const segments = raw.map(r => ({ text: r.text, start: Math.round(r.offset/1000) }));
