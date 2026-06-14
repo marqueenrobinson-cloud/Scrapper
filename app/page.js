@@ -111,19 +111,19 @@ export default function Home() {
                     target="_blank"
                     rel="noreferrer"
                   >
-                      <a
-  style={styles.smallBtnLink}
-  href={`https://avatargen-two.vercel.app/?script=${encodeURIComponent(
-    buildScript(m)
-  )}`}
-  target="_blank"
-  rel="noreferrer"
->
-  Make Avatar Video
-</a>
                     Jump to moment
                   </a>
                 )}
+                <a
+                  style={styles.avatarBtn}
+                  href={`https://avatargen-two.vercel.app/?script=${encodeURIComponent(
+                    buildScript(m)
+                  )}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  🎬 Make Avatar Video
+                </a>
               </div>
             </div>
           ))}
@@ -139,10 +139,15 @@ function tsToSeconds(ts) {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   return parts[0] || 0;
 }
+
 function buildScript(m) {
-  // Turn a clip into a short spoken script for the avatar
-  return `${m.hook} ${m.caption}`;
-          }
+  // Turn a clip into a short spoken script for the avatar.
+  // Hook first (it's the attention grabber), then the caption as the body.
+  const hook = (m.hook || "").trim();
+  const caption = (m.caption || "").trim();
+  return [hook, caption].filter(Boolean).join(" ");
+}
+
 const styles = {
   main: {
     minHeight: "100vh",
@@ -200,7 +205,7 @@ const styles = {
   tags: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 },
   tag: { color: "#a1a1aa", fontSize: 13 },
   why: { color: "#71717a", fontSize: 13, fontStyle: "italic", margin: "0 0 12px" },
-  cardActions: { display: "flex", gap: 8 },
+  cardActions: { display: "flex", gap: 8, flexWrap: "wrap" },
   smallBtn: {
     padding: "8px 14px",
     fontSize: 13,
@@ -221,5 +226,14 @@ const styles = {
     color: "#e4e4e7",
     textDecoration: "none",
   },
+  avatarBtn: {
+    padding: "8px 14px",
+    fontSize: 13,
+    fontWeight: 700,
+    borderRadius: 8,
+    border: "none",
+    background: "linear-gradient(90deg, #34d399, #a3e635)",
+    color: "#0b0b0f",
+    textDecoration: "none",
+  },
 };
-
