@@ -111,6 +111,16 @@ export default function Home() {
                     target="_blank"
                     rel="noreferrer"
                   >
+                      <a
+  style={styles.smallBtnLink}
+  href={`https://avatargen-two.vercel.app/?script=${encodeURIComponent(
+    buildScript(m)
+  )}`}
+  target="_blank"
+  rel="noreferrer"
+>
+  Make Avatar Video
+</a>
                     Jump to moment
                   </a>
                 )}
@@ -129,7 +139,10 @@ function tsToSeconds(ts) {
   if (parts.length === 2) return parts[0] * 60 + parts[1];
   return parts[0] || 0;
 }
-
+function buildScript(m) {
+  // Turn a clip into a short spoken script for the avatar
+  return `${m.hook} ${m.caption}`;
+          }
 const styles = {
   main: {
     minHeight: "100vh",
