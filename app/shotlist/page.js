@@ -8,10 +8,13 @@ export default function ShotlistPage() {
   const [shotlist, setShotlist] = useState([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
+  const [footage, setFootage] = useState([]);
+  const [findingFootage, setFindingFootage] = useState(false);
 
   async function handleRun() {
     setError("");
     setShotlist([]);
+    setFootage([]);
     setLoading(true);
     try {
       const res = await fetch("/api/shotlist", {
@@ -29,6 +32,29 @@ export default function ShotlistPage() {
       setLoading(false);
     }
   }
+
+  async function handleFindFootage() {
+    setError("");
+    setFindingFootage(true);
+    try {
+      const res = await fetch("/api/footage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shotlist, orientation: "portrait" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed.");
+      setFootage(data.footage || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setFindingFootage(false);
+    }
+  }
+
+  // Merge footage into shots by index for display
+  const footageByIndex = {};
+  footage.forEach((f) => { footageByIndex[f.index] = f; });
 
   return (
     <main style={styles.main}>
@@ -61,21 +87,67 @@ export default function ShotlistPage() {
           </div>
         )}
 
+        {shotlist.length > 0 && (
+          <button
+            style={{ ...styles.footageBtn, opacity: findingFootage ? 0.5 : 1 }}
+            onClick={handleFindFootage}
+            disabled={findingFootage}
+          >
+            {findingFootage ? "Finding footage…" : "🎞️ Find Footage"}
+          </button>
+        )}
+
+        {footage.length > 0 && (
+          <div style={styles.totalBar}>
+            Found footage for {footage.filter((f) => f.found).length} of{" "}
+            {footage.length} shots
+          </div>
+        )}
+
         <div style={styles.list}>
-          {shotlist.map((b) => (
-            <div key={b.index} style={styles.beat}>
-              <div style={styles.beatTime}>
-                {fmt(b.start)}–{fmt(b.start + b.seconds)}
+          {shotlist.map((b) => {
+            const f = footageByIndex[b.index];
+            return (
+              <div key={b.index} style={styles.beat}>
+                <div style={styles.beatTime}>
+                  {fmt(b.start)}–{fmt(b.start + b.seconds)}
+                </div>
+                <div style={styles.beatText}>{b.text}</div>
+                <div style={styles.beatSearch}>
+                  🎬 {b.search}
+                  {b.fallback ? (
+                    <span style={styles.fallback}> / {b.fallback}</span>
+                  ) : null}
+                </div>
+                {f && (
+                  <div style={styles.footageRow}>
+                    {f.found ? (
+                      <>
+                        <img src={f.thumbnail} alt="" style={styles.thumb} />
+                        <div style={styles.footageMeta}>
+                          <div style={styles.foundTag}>
+                            ✓ {f.usedFallback ? "fallback" : "matched"}: {f.searchUsed}
+                          </div>
+                          {f.videoUrl && (
+                            <a
+                              href={f.videoUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={styles.previewLink}
+                            >
+                              Preview clip ↗
+                            </a>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={styles.notFound}>No clip found — try editing the term</div>
+                    )}
+                  </div>
+                )}
               </div>
-              <div style={styles.beatText}>{b.text}</div>
-              <div style={styles.beatSearch}>
-                🎬 {b.search}
-                {b.fallback ? (
-                  <span style={styles.fallback}> / {b.fallback}</span>
-                ) : null}
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </main>
@@ -151,5 +223,35 @@ const styles = {
   beatText: { fontSize: 14, color: "#e4e4e7", marginBottom: 8, lineHeight: 1.5 },
   beatSearch: { fontSize: 13, color: "#6bffb8", fontWeight: 600 },
   fallback: { color: "#52525b", fontWeight: 400 },
+  footageBtn: {
+    width: "100%",
+    marginTop: 8,
+    marginBottom: 8,
+    padding: "12px 16px",
+    fontSize: 15,
+    fontWeight: 700,
+    borderRadius: 12,
+    border: "none",
+    background: "linear-gradient(90deg, #34d399, #a3e635)",
+    color: "#0b0b0f",
+    cursor: "pointer",
+  },
+  footageRow: {
+    display: "flex",
+    gap: 12,
+    marginTop: 12,
+    alignItems: "center",
+  },
+  thumb: {
+    width: 72,
+    height: 96,
+    objectFit: "cover",
+    borderRadius: 8,
+    flexShrink: 0,
+    border: "1px solid #27272a",
+  },
+  footageMeta: { display: "flex", flexDirection: "column", gap: 6 },
+  foundTag: { fontSize: 12, color: "#6bffb8", fontWeight: 600 },
+  previewLink: { fontSize: 12, color: "#a78bfa", textDecoration: "none" },
+  notFound: { fontSize: 12, color: "#f87171", marginTop: 12 },
 };
-
