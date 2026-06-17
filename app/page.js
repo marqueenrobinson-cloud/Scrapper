@@ -12,6 +12,8 @@ export default function ShotlistPage() {
   const [findingFootage, setFindingFootage] = useState(false);
   const [topic, setTopic] = useState("");
   const [generating, setGenerating] = useState(false);
+  const [buildingVideo, setBuildingVideo] = useState(false);
+  const [videoUrl, setVideoUrl] = useState("");
 
   const VIBES = [
     "Crypto news",
@@ -88,6 +90,41 @@ export default function ShotlistPage() {
   const footageByIndex = {};
   footage.forEach((f) => { footageByIndex[f.index] = f; });
 
+  async function handleBuildVideo() {
+    setError("");
+    setVideoUrl("");
+    setBuildingVideo(true);
+    try {
+      // Build the shot payload from footage results (only ones with clips)
+      const shots = footage
+        .filter((f) => f.found && f.videoUrl)
+        .map((f) => ({
+          text: f.text,
+          videoUrl: f.videoUrl,
+          seconds: f.seconds,
+        }));
+
+      const res = await fetch("/api/build-video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shots }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Video build failed.");
+      }
+
+      // The response is the MP4 itself — turn it into a playable URL
+      const blob = await res.blob();
+      setVideoUrl(URL.createObjectURL(blob));
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBuildingVideo(false);
+    }
+  }
+
   return (
     <main style={styles.main}>
       <div style={styles.container}>
@@ -133,17 +170,7 @@ export default function ShotlistPage() {
         >
           {loading ? "Building…" : "Build Shot List"}
         </button>
-        
-        {script && (
-          <a
-            href={`https://avatargen-two.vercel.app/?script=${encodeURIComponent(script)}`}
-            target="_blank"
-            rel="noreferrer"
-            style={styles.avatarBtn}
-          >
-            🎬 Make Avatar Video →
-          </a>
-        )}
+
         {error && <p style={styles.error}>{error}</p>}
 
         {shotlist.length > 0 && (
@@ -166,6 +193,25 @@ export default function ShotlistPage() {
           <div style={styles.totalBar}>
             Found footage for {footage.filter((f) => f.found).length} of{" "}
             {footage.length} shots
+          </div>
+        )}
+
+        {footage.filter((f) => f.found).length > 0 && (
+          <button
+            style={{ ...styles.makeVideoBtn, opacity: buildingVideo ? 0.5 : 1 }}
+            onClick={handleBuildVideo}
+            disabled={buildingVideo}
+          >
+            {buildingVideo ? "Building video… (up to a minute)" : "🎥 Make Video"}
+          </button>
+        )}
+
+        {videoUrl && (
+          <div style={styles.videoWrap}>
+            <video src={videoUrl} controls style={styles.video} />
+            <a href={videoUrl} download="faceless.mp4" style={styles.downloadBtn}>
+              ↓ Download MP4
+            </a>
           </div>
         )}
 
@@ -272,6 +318,45 @@ const styles = {
     cursor: "pointer",
   },
   genStatus: { fontSize: 13, color: "#a78bfa", marginTop: 10 },
+  makeVideoBtn: {
+    width: "100%",
+    marginTop: 8,
+    marginBottom: 8,
+    padding: "14px 16px",
+    fontSize: 16,
+    fontWeight: 800,
+    borderRadius: 12,
+    border: "none",
+    background: "linear-gradient(90deg, #00ffff, #e8ff47)",
+    color: "#0b0b0f",
+    cursor: "pointer",
+  },
+  videoWrap: {
+    marginTop: 16,
+    marginBottom: 16,
+    background: "#18181b",
+    border: "1px solid #27272a",
+    borderRadius: 14,
+    padding: 12,
+  },
+  video: {
+    width: "100%",
+    borderRadius: 10,
+    maxHeight: 420,
+    display: "block",
+    marginBottom: 12,
+  },
+  downloadBtn: {
+    display: "block",
+    textAlign: "center",
+    padding: "12px 0",
+    background: "linear-gradient(90deg, #34d399, #a3e635)",
+    color: "#0b0b0f",
+    borderRadius: 10,
+    fontWeight: 700,
+    fontSize: 14,
+    textDecoration: "none",
+  },
   textarea: {
     width: "100%",
     padding: "14px 16px",
@@ -295,22 +380,6 @@ const styles = {
     background: "#8b5cf6",
     color: "#fff",
     cursor: "pointer",
-  },
-  avatarBtn: {
-    display: "block",
-    width: "100%",
-    marginTop: 12,
-    padding: "14px 16px",
-    fontSize: 16,
-    fontWeight: 700,
-    borderRadius: 12,
-    border: "none",
-    background: "linear-gradient(90deg, #00ffff, #e8ff47)",
-    color: "#05050f",
-    cursor: "pointer",
-    textAlign: "center",
-    textDecoration: "none",
-    boxSizing: "border-box",
   },
   error: { color: "#f87171", marginTop: 16, fontSize: 14 },
   totalBar: {
