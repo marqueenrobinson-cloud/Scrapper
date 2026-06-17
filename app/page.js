@@ -133,7 +133,17 @@ export default function ShotlistPage() {
         >
           {loading ? "Building…" : "Build Shot List"}
         </button>
-
+        
+        {script && (
+          <a
+            href={`https://avatargen-two.vercel.app/?script=${encodeURIComponent(script)}`}
+            target="_blank"
+            rel="noreferrer"
+            style={styles.avatarBtn}
+          >
+            🎬 Make Avatar Video →
+          </a>
+        )}
         {error && <p style={styles.error}>{error}</p>}
 
         {shotlist.length > 0 && (
