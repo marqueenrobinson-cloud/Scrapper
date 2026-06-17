@@ -2,150 +2,217 @@
 
 import { useState } from "react";
 
-export default function Home() {
-  const [url, setUrl] = useState("");
+export default function ShotlistPage() {
+  const [script, setScript] = useState("");
   const [loading, setLoading] = useState(false);
-  const [status, setStatus] = useState("");
-  const [moments, setMoments] = useState([]);
-  const [videoId, setVideoId] = useState("");
+  const [shotlist, setShotlist] = useState([]);
+  const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
+  const [footage, setFootage] = useState([]);
+  const [findingFootage, setFindingFootage] = useState(false);
+  const [topic, setTopic] = useState("");
+  const [generating, setGenerating] = useState(false);
+
+  const VIBES = [
+    "Crypto news",
+    "Motivational",
+    "Horror story",
+    "Fun fact",
+    "Product promo",
+    "Storytime",
+  ];
+
+  async function handleGenerate(vibe) {
+    setError("");
+    setShotlist([]);
+    setFootage([]);
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/generate-script", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vibe, topic, seconds: 30 }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed.");
+      setScript(data.script || "");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   async function handleRun() {
     setError("");
-    setMoments([]);
+    setShotlist([]);
+    setFootage([]);
     setLoading(true);
-
     try {
-      // Step 1: fetch transcript
-      setStatus("Fetching transcript…");
-      const tRes = await fetch("/api/transcript", {
+      const res = await fetch("/api/shotlist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ script }),
       });
-      const tData = await tRes.json();
-      if (!tRes.ok) throw new Error(tData.error || "Transcript failed.");
-      setVideoId(tData.videoId);
-
-      // Step 2: analyze with Claude
-      setStatus("Finding the best moments…");
-      const aRes = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          segments: tData.segments,
-          fullText: tData.fullText,
-        }),
-      });
-      const aData = await aRes.json();
-      if (!aRes.ok) throw new Error(aData.error || "Analysis failed.");
-
-      setMoments(aData.moments || []);
-      setStatus("");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed.");
+      setShotlist(data.shotlist || []);
+      setTotal(data.totalSeconds || 0);
     } catch (err) {
       setError(err.message);
-      setStatus("");
     } finally {
       setLoading(false);
     }
   }
 
-  function copyCaption(m) {
-    const tags = (m.hashtags || []).map((h) => `#${h}`).join(" ");
-    navigator.clipboard.writeText(`${m.caption}\n\n${tags}`);
+  async function handleFindFootage() {
+    setError("");
+    setFindingFootage(true);
+    try {
+      const res = await fetch("/api/footage", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shotlist, orientation: "portrait" }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed.");
+      setFootage(data.footage || []);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setFindingFootage(false);
+    }
   }
+
+  // Merge footage into shots by index for display
+  const footageByIndex = {};
+  footage.forEach((f) => { footageByIndex[f.index] = f; });
 
   return (
     <main style={styles.main}>
       <div style={styles.container}>
-        <h1 style={styles.h1}>Clip Agent</h1>
+        <h1 style={styles.h1}>Shot List Builder</h1>
         <p style={styles.sub}>
-          Paste a YouTube link. Get the moments worth clipping.
+          Paste a script. See the B-roll plan: what shows on screen, and when.
         </p>
 
-        <div style={styles.inputRow}>
+        <div style={styles.ideaBox}>
+          <div style={styles.ideaLabel}>Need a script? Pick a vibe ↓</div>
           <input
-            style={styles.input}
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://youtube.com/watch?v=…"
-            inputMode="url"
+            style={styles.topicInput}
+            value={topic}
+            onChange={(e) => setTopic(e.target.value)}
+            placeholder="Optional: a topic (e.g. 'Bitcoin halving')"
           />
-          <button
-            style={{ ...styles.button, opacity: loading || !url ? 0.5 : 1 }}
-            onClick={handleRun}
-            disabled={loading || !url}
-          >
-            {loading ? "Working…" : "Find Clips"}
-          </button>
+          <div style={styles.vibeRow}>
+            {VIBES.map((v) => (
+              <button
+                key={v}
+                style={{ ...styles.vibeBtn, opacity: generating ? 0.5 : 1 }}
+                onClick={() => handleGenerate(v)}
+                disabled={generating}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+          {generating && <div style={styles.genStatus}>Writing your script…</div>}
         </div>
 
-        {status && <p style={styles.status}>{status}</p>}
+        <textarea
+          style={styles.textarea}
+          value={script}
+          onChange={(e) => setScript(e.target.value)}
+          placeholder="Paste your narration script here..."
+          rows={6}
+        />
+        <button
+          style={{ ...styles.button, opacity: loading || !script ? 0.5 : 1 }}
+          onClick={handleRun}
+          disabled={loading || !script}
+        >
+          {loading ? "Building…" : "Build Shot List"}
+        </button>
+
         {error && <p style={styles.error}>{error}</p>}
 
-        <div style={styles.cards}>
-          {moments.map((m, i) => (
-            <div key={i} style={styles.card}>
-              <div style={styles.timestamp}>{m.start}</div>
-              <h3 style={styles.cardTitle}>{m.title}</h3>
-              <div style={styles.hook}>“{m.hook}”</div>
-              <p style={styles.caption}>{m.caption}</p>
-              <div style={styles.tags}>
-                {(m.hashtags || []).map((h, j) => (
-                  <span key={j} style={styles.tag}>
-                    #{h}
-                  </span>
-                ))}
-              </div>
-              <p style={styles.why}>{m.why}</p>
-              <div style={styles.cardActions}>
-                <button style={styles.smallBtn} onClick={() => copyCaption(m)}>
-                  Copy caption
-                </button>
-                {videoId && (
-                  <a
-                    style={styles.smallBtnLink}
-                    href={`https://youtube.com/watch?v=${videoId}&t=${tsToSeconds(
-                      m.start
-                    )}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Jump to moment
-                  </a>
+        {shotlist.length > 0 && (
+          <div style={styles.totalBar}>
+            {shotlist.length} shots · ~{total}s total
+          </div>
+        )}
+
+        {shotlist.length > 0 && (
+          <button
+            style={{ ...styles.footageBtn, opacity: findingFootage ? 0.5 : 1 }}
+            onClick={handleFindFootage}
+            disabled={findingFootage}
+          >
+            {findingFootage ? "Finding footage…" : "🎞️ Find Footage"}
+          </button>
+        )}
+
+        {footage.length > 0 && (
+          <div style={styles.totalBar}>
+            Found footage for {footage.filter((f) => f.found).length} of{" "}
+            {footage.length} shots
+          </div>
+        )}
+
+        <div style={styles.list}>
+          {shotlist.map((b) => {
+            const f = footageByIndex[b.index];
+            return (
+              <div key={b.index} style={styles.beat}>
+                <div style={styles.beatTime}>
+                  {fmt(b.start)}–{fmt(b.start + b.seconds)}
+                </div>
+                <div style={styles.beatText}>{b.text}</div>
+                <div style={styles.beatSearch}>
+                  🎬 {b.search}
+                  {b.fallback ? (
+                    <span style={styles.fallback}> / {b.fallback}</span>
+                  ) : null}
+                </div>
+                {f && (
+                  <div style={styles.footageRow}>
+                    {f.found ? (
+                      <>
+                        <img src={f.thumbnail} alt="" style={styles.thumb} />
+                        <div style={styles.footageMeta}>
+                          <div style={styles.foundTag}>
+                            ✓ {f.usedFallback ? "fallback" : "matched"}: {f.searchUsed}
+                          </div>
+                          {f.videoUrl && (
+                            <a
+                              href={f.videoUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={styles.previewLink}
+                            >
+                              Preview clip ↗
+                            </a>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div style={styles.notFound}>No clip found — try editing the term</div>
+                    )}
+                  </div>
                 )}
-                <a
-                  style={styles.avatarBtn}
-                  href={`https://avatargen-two.vercel.app/?script=${encodeURIComponent(
-                    buildScript(m)
-                  )}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  🎬 Make Avatar Video
-                </a>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </main>
   );
 }
 
-function tsToSeconds(ts) {
-  if (!ts) return 0;
-  const parts = String(ts).split(":").map(Number);
-  if (parts.length === 2) return parts[0] * 60 + parts[1];
-  return parts[0] || 0;
-}
-
-function buildScript(m) {
-  // Turn a clip into a short spoken script for the avatar.
-  // Hook first (it's the attention grabber), then the caption as the body.
-  const hook = (m.hook || "").trim();
-  const caption = (m.caption || "").trim();
-  return [hook, caption].filter(Boolean).join(" ");
+function fmt(s) {
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${m}:${String(sec).padStart(2, "0")}`;
 }
 
 const styles = {
@@ -157,20 +224,59 @@ const styles = {
     padding: "24px 16px 80px",
   },
   container: { maxWidth: 640, margin: "0 auto" },
-  h1: { fontSize: 32, fontWeight: 800, margin: "12px 0 4px" },
+  h1: { fontSize: 30, fontWeight: 800, margin: "12px 0 4px" },
   sub: { color: "#a1a1aa", margin: "0 0 24px", fontSize: 15 },
-  inputRow: { display: "flex", flexDirection: "column", gap: 10 },
-  input: {
+  ideaBox: {
+    background: "#141418",
+    border: "1px solid #27272a",
+    borderRadius: 14,
+    padding: 16,
+    marginBottom: 16,
+  },
+  ideaLabel: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#a78bfa",
+    marginBottom: 10,
+  },
+  topicInput: {
+    width: "100%",
+    padding: "10px 14px",
+    fontSize: 14,
+    borderRadius: 10,
+    border: "1px solid #27272a",
+    background: "#0b0b0f",
+    color: "#fff",
+    boxSizing: "border-box",
+    marginBottom: 10,
+  },
+  vibeRow: { display: "flex", flexWrap: "wrap", gap: 8 },
+  vibeBtn: {
+    padding: "8px 14px",
+    fontSize: 13,
+    fontWeight: 600,
+    borderRadius: 20,
+    border: "1px solid #3f3f46",
+    background: "transparent",
+    color: "#e4e4e7",
+    cursor: "pointer",
+  },
+  genStatus: { fontSize: 13, color: "#a78bfa", marginTop: 10 },
+  textarea: {
     width: "100%",
     padding: "14px 16px",
-    fontSize: 16,
+    fontSize: 15,
     borderRadius: 12,
     border: "1px solid #27272a",
     background: "#18181b",
     color: "#fff",
     boxSizing: "border-box",
+    resize: "vertical",
+    lineHeight: 1.6,
   },
   button: {
+    width: "100%",
+    marginTop: 12,
     padding: "14px 16px",
     fontSize: 16,
     fontWeight: 700,
@@ -180,60 +286,63 @@ const styles = {
     color: "#fff",
     cursor: "pointer",
   },
-  status: { color: "#a78bfa", marginTop: 16, fontSize: 14 },
   error: { color: "#f87171", marginTop: 16, fontSize: 14 },
-  cards: { display: "flex", flexDirection: "column", gap: 16, marginTop: 24 },
-  card: {
+  totalBar: {
+    marginTop: 24,
+    marginBottom: 8,
+    color: "#a78bfa",
+    fontSize: 13,
+    fontWeight: 600,
+  },
+  list: { display: "flex", flexDirection: "column", gap: 10, marginTop: 8 },
+  beat: {
     background: "#18181b",
     border: "1px solid #27272a",
-    borderRadius: 16,
-    padding: 18,
+    borderRadius: 12,
+    padding: 14,
   },
-  timestamp: {
+  beatTime: {
     display: "inline-block",
     background: "#27272a",
     color: "#a78bfa",
-    padding: "3px 10px",
-    borderRadius: 8,
-    fontSize: 13,
+    padding: "2px 8px",
+    borderRadius: 6,
+    fontSize: 12,
     fontWeight: 600,
-    marginBottom: 10,
+    marginBottom: 8,
   },
-  cardTitle: { fontSize: 18, fontWeight: 700, margin: "0 0 8px" },
-  hook: { color: "#fbbf24", fontStyle: "italic", marginBottom: 10, fontSize: 15 },
-  caption: { color: "#d4d4d8", fontSize: 14, lineHeight: 1.5, margin: "0 0 10px" },
-  tags: { display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 },
-  tag: { color: "#a1a1aa", fontSize: 13 },
-  why: { color: "#71717a", fontSize: 13, fontStyle: "italic", margin: "0 0 12px" },
-  cardActions: { display: "flex", gap: 8, flexWrap: "wrap" },
-  smallBtn: {
-    padding: "8px 14px",
-    fontSize: 13,
-    fontWeight: 600,
-    borderRadius: 8,
-    border: "1px solid #3f3f46",
-    background: "transparent",
-    color: "#e4e4e7",
-    cursor: "pointer",
-  },
-  smallBtnLink: {
-    padding: "8px 14px",
-    fontSize: 13,
-    fontWeight: 600,
-    borderRadius: 8,
-    border: "1px solid #3f3f46",
-    background: "transparent",
-    color: "#e4e4e7",
-    textDecoration: "none",
-  },
-  avatarBtn: {
-    padding: "8px 14px",
-    fontSize: 13,
+  beatText: { fontSize: 14, color: "#e4e4e7", marginBottom: 8, lineHeight: 1.5 },
+  beatSearch: { fontSize: 13, color: "#6bffb8", fontWeight: 600 },
+  fallback: { color: "#52525b", fontWeight: 400 },
+  footageBtn: {
+    width: "100%",
+    marginTop: 8,
+    marginBottom: 8,
+    padding: "12px 16px",
+    fontSize: 15,
     fontWeight: 700,
-    borderRadius: 8,
+    borderRadius: 12,
     border: "none",
     background: "linear-gradient(90deg, #34d399, #a3e635)",
     color: "#0b0b0f",
-    textDecoration: "none",
+    cursor: "pointer",
   },
+  footageRow: {
+    display: "flex",
+    gap: 12,
+    marginTop: 12,
+    alignItems: "center",
+  },
+  thumb: {
+    width: 72,
+    height: 96,
+    objectFit: "cover",
+    borderRadius: 8,
+    flexShrink: 0,
+    border: "1px solid #27272a",
+  },
+  footageMeta: { display: "flex", flexDirection: "column", gap: 6 },
+  foundTag: { fontSize: 12, color: "#6bffb8", fontWeight: 600 },
+  previewLink: { fontSize: 12, color: "#a78bfa", textDecoration: "none" },
+  notFound: { fontSize: 12, color: "#f87171", marginTop: 12 },
 };
