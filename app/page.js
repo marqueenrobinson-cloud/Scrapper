@@ -169,7 +169,16 @@ export default function ShotlistPage() {
           disabled={loading || !script}
         >
           {loading ? "Building…" : "Build Shot List"}
-        </button>
+        </button> {script && (
+          <a
+            href={`https://avatargen-two.vercel.app/?script=${encodeURIComponent(script)}`}
+            target="_blank"
+            rel="noreferrer"
+            style={styles.avatarBtn}
+          >
+            🎬 Make Avatar Video →
+          </a>
+        )}
 
         {error && <p style={styles.error}>{error}</p>}
 
