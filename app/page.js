@@ -213,7 +213,22 @@ export default function ShotlistPage() {
           >
             {buildingVideo ? "Building video… (up to a minute)" : "🎥 Make Video"}
           </button>
-        )}
+        )} avatarBtn: {
+    display: "block",
+    width: "100%",
+    marginTop: 12,
+    padding: "14px 16px",
+    fontSize: 16,
+    fontWeight: 700,
+    borderRadius: 12,
+    border: "none",
+    background: "linear-gradient(90deg, #00ffff, #e8ff47)",
+    color: "#05050f",
+    cursor: "pointer",
+    textAlign: "center",
+    textDecoration: "none",
+    boxSizing: "border-box",
+  },
 
         {videoUrl && (
           <div style={styles.videoWrap}>
