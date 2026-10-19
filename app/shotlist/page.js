@@ -10,6 +10,7 @@ export default function ShotlistPage() {
   const [error, setError] = useState("");
   const [footage, setFootage] = useState([]);
   const [findingFootage, setFindingFootage] = useState(false);
+  const [stills, setStills] = useState({});
 
   async function handleRun() {
     setError("");
@@ -49,6 +50,36 @@ export default function ShotlistPage() {
       setError(err.message);
     } finally {
       setFindingFootage(false);
+    }
+  }
+
+  async function handleMakeStill(b) {
+    setStills((s) => ({ ...s, [b.index]: { loading: true } }));
+    try {
+      const start = await fetch("/api/zencreator", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: b.search }),
+      });
+      const started = await start.json();
+      if (!start.ok || !started.id) throw new Error(started.error || "Could not start.");
+
+      let image = "";
+      for (let i = 0; i < 45; i++) {
+        await new Promise((r) => setTimeout(r, 4000));
+        const poll = await fetch(`/api/zencreator?id=${started.id}`);
+        const data = await poll.json();
+        if (!poll.ok) throw new Error(data.error || "Status check failed.");
+        if (data.status === "failed") throw new Error(String(data.error || "Generation failed."));
+        if (data.status === "succeeded" && data.imageData) {
+          image = data.imageData;
+          break;
+        }
+      }
+      if (!image) throw new Error("Timed out. Try again.");
+      setStills((s) => ({ ...s, [b.index]: { image } }));
+    } catch (err) {
+      setStills((s) => ({ ...s, [b.index]: { error: err.message } }));
     }
   }
 
@@ -142,6 +173,39 @@ export default function ShotlistPage() {
                       </>
                     ) : (
                       <div style={styles.notFound}>No clip found — try editing the term</div>
+                    )}
+                  </div>
+                )}
+                {f && !f.found && (
+                  <div style={{ marginTop: 10 }}>
+                    {!(stills[b.index] && stills[b.index].image) && (
+                      <button
+                        style={{
+                          ...styles.stillBtn,
+                          opacity: stills[b.index] && stills[b.index].loading ? 0.5 : 1,
+                        }}
+                        onClick={() => handleMakeStill(b)}
+                        disabled={!!(stills[b.index] && stills[b.index].loading)}
+                      >
+                        {stills[b.index] && stills[b.index].loading
+                          ? "Making image… (up to 1 min)"
+                          : "🖼️ Make AI image instead"}
+                      </button>
+                    )}
+                    {stills[b.index] && stills[b.index].error && (
+                      <p style={styles.error}>{stills[b.index].error}</p>
+                    )}
+                    {stills[b.index] && stills[b.index].image && (
+                      <div>
+                        <img src={stills[b.index].image} alt="" style={styles.stillImg} />
+                        <a
+                          href={stills[b.index].image}
+                          download={`shot-${b.index}.jpg`}
+                          style={styles.previewLink}
+                        >
+                          Save image ↓
+                        </a>
+                      </div>
                     )}
                   </div>
                 )}
@@ -254,4 +318,24 @@ const styles = {
   foundTag: { fontSize: 12, color: "#6bffb8", fontWeight: 600 },
   previewLink: { fontSize: 12, color: "#a78bfa", textDecoration: "none" },
   notFound: { fontSize: 12, color: "#f87171", marginTop: 12 },
+  stillBtn: {
+    width: "100%",
+    padding: "10px 14px",
+    fontSize: 14,
+    fontWeight: 700,
+    borderRadius: 10,
+    border: "1px solid #3f3f46",
+    background: "#27272a",
+    color: "#f4f4f5",
+    cursor: "pointer",
+  },
+  stillImg: {
+    width: 120,
+    aspectRatio: "9 / 16",
+    objectFit: "cover",
+    borderRadius: 8,
+    display: "block",
+    marginBottom: 6,
+    border: "1px solid #27272a",
+  },
 };
